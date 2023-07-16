@@ -1,0 +1,185 @@
+From 11bdb47892725636ef0af9400b9288d0ac8ac355 Mon Sep 17 00:00:00 2001
+From: Josiah Chapman <josiah.chapman@gmail.com>
+Date: Tue, 2 Aug 2022 23:12:47 -0700
+Subject: [PATCH 1/4] initial commit
+
+---
+ .gitignore             |    23 +
+ package-lock.json      | 36249 +++++++++++++++++++++++++++++++++++++++
+ package.json           |    40 +
+ public/favicon.ico     |   Bin 0 -> 3870 bytes
+ public/index.html      |    46 +
+ public/manifest.json   |    15 +
+ server.py              |   320 +
+ src/App.css            |    49 +
+ src/App.test.js        |     9 +
+ src/App.tsx            |    59 +
+ src/DataManipulator.ts |    20 +
+ src/DataStreamer.ts    |    31 +
+ src/Graph.css          |     4 +
+ src/Graph.tsx          |    60 +
+ src/index.css          |    14 +
+ src/index.tsx          |    11 +
+ src/react-app-env.d.ts |     1 +
+ test.csv               |  1832 ++
+ tsconfig.json          |    25 +
+ 19 files changed, 38808 insertions(+)
+ create mode 100755 .gitignore
+ create mode 100644 package-lock.json
+ create mode 100644 package.json
+ create mode 100755 public/favicon.ico
+ create mode 100755 public/index.html
+ create mode 100755 public/manifest.json
+ create mode 100644 server.py
+ create mode 100755 src/App.css
+ create mode 100755 src/App.test.js
+ create mode 100755 src/App.tsx
+ create mode 100644 src/DataManipulator.ts
+ create mode 100644 src/DataStreamer.ts
+ create mode 100644 src/Graph.css
+ create mode 100644 src/Graph.tsx
+ create mode 100755 src/index.css
+ create mode 100755 src/index.tsx
+ create mode 100644 src/react-app-env.d.ts
+ create mode 100644 test.csv
+ create mode 100644 tsconfig.json
+
+
+diff --git a/requirements.txt b/datafeed/requirements.txt
+similarity index 100%
+rename from requirements.txt
+rename to datafeed/requirements.txt
+diff --git a/server.py b/datafeed/server3.py
+similarity index 100%
+rename from server.py
+rename to datafeed/server3.py
+-- 
+2.41.0.windows.3
+
+
+From 39dd98100f35652642f7f264ebd14e4d9cf7402e Mon Sep 17 00:00:00 2001
+From: Shubham <shubhamsalaskar03@gmail.com>
+Date: Sun, 16 Jul 2023 12:18:31 +0530
+Subject: [PATCH 4/4] Updation On Files
+
+---
+ src/DataManipulator.ts | 36 ++++++++++++++++++++++++++----------
+ src/Graph.tsx          | 27 ++++++++++++++++++---------
+ 2 files changed, 44 insertions(+), 19 deletions(-)
+
+diff --git a/src/DataManipulator.ts b/src/DataManipulator.ts
+index 7f62295..147e99f 100644
+--- a/src/DataManipulator.ts
++++ b/src/DataManipulator.ts
+@@ -1,20 +1,36 @@
+ import { ServerRespond } from './DataStreamer';
+ 
+ export interface Row {
+-  stock: string,
+-  top_ask_price: number,
++  //top_ask_price: number,
++  //top_bid_price: number,
++  price_abc: number,
++  price_def: number,
++  ratio: number,
+   timestamp: Date,
++  upper_bound: number,
++  lower_bound: number,
++  trigger_alert: number | undefined,
+ }
+ 
+ 
+ export class DataManipulator {
+-  static generateRow(serverResponds: ServerRespond[]) {
+-    return serverResponds.map((el: any) => {
+-      return {
+-        stock: el.stock,
+-        top_ask_price: el.top_ask && el.top_ask.price || 0,
+-        timestamp: el.timestamp,
+-      };
+-    })
++  static generateRow(serverResponds: ServerRespond[]): Row {
++    const priceABC = (serverResponds[0].top_ask.price + serverResponds[0].top_bid.price) / 2;
++    const priceDEF = (serverResponds[1].top_ask.price + serverResponds[1].top_bid.price) / 2;
++    const ratio = priceABC / priceDEF;
++    const upperBound = 1 + 0.05;
++    const lowerBound = 1 - 0.05;
++    return {
++      price_abc: priceABC,
++      price_def: priceDEF,
++      ratio,
++      timestamp: serverResponds[0].timestamp > serverResponds[1].timestamp ?
++        serverResponds[0].timestamp : serverResponds[1].timestamp,
++      upper_bound: upperBound,
++      lower_bound: lowerBound,
++      trigger_alert: (ratio > upperBound || ratio < lowerBound) ? ratio : undefined, 
++    };
+   }
+ }
++  
++
+diff --git a/src/Graph.tsx b/src/Graph.tsx
+index 277797d..620a997 100644
+--- a/src/Graph.tsx
++++ b/src/Graph.tsx
+@@ -1,5 +1,5 @@
+ import React, { Component } from 'react';
+-import { Table } from '@finos/perspective';
++import { Table, TableData } from '@finos/perspective';
+ import { ServerRespond } from './DataStreamer';
+ import { DataManipulator } from './DataManipulator';
+ import './Graph.css';
+@@ -23,10 +23,13 @@ class Graph extends Component<IProps, {}> {
+     const elem = document.getElementsByTagName('perspective-viewer')[0] as unknown as PerspectiveViewerElement;
+ 
+     const schema = {
+-      stock: 'string',
++      //stock: 'string',
+       top_ask_price: 'float',
+       top_bid_price: 'float',
+       timestamp: 'date',
++      upper_bound: 'float',
++      lower_bound: 'float',
++      trigger_alert: 'float',
+     };
+ 
+     if (window.perspective && window.perspective.worker()) {
+@@ -36,23 +39,29 @@ class Graph extends Component<IProps, {}> {
+       // Load the `table` in the `<perspective-viewer>` DOM reference.
+       elem.load(this.table);
+       elem.setAttribute('view', 'y_line');
+-      elem.setAttribute('column-pivots', '["stock"]');
++     // elem.setAttribute('column-pivots', '["stock"]');
+       elem.setAttribute('row-pivots', '["timestamp"]');
+-      elem.setAttribute('columns', '["top_ask_price"]');
++      elem.setAttribute('columns', '["ratio", "lower_bound", "upper_bound", "trigger_alert"]');
+       elem.setAttribute('aggregates', JSON.stringify({
+-        stock: 'distinctcount',
+-        top_ask_price: 'avg',
+-        top_bid_price: 'avg',
++        //stock: 'distinctcount',
++        //top_ask_price: 'avg',
++        //top_bid_price: 'avg',
++        price_abc:'avg',
++        price_def: 'avg',
++        ratio: 'avg',
+         timestamp: 'distinct count',
++        upper_bound: 'avg',
++        lower_bound: 'avg',
++        trigger_alert: 'avg',
+       }));
+     }
+   }
+ 
+   componentDidUpdate() {
+     if (this.table) {
+-      this.table.update(
++      this.table.update([
+         DataManipulator.generateRow(this.props.data),
+-      );
++      ] as unknown as TableData);
+     }
+   }
+ }
+-- 
+2.41.0.windows.3
